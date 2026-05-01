@@ -1,10 +1,12 @@
 #!/usr/bin/env bash
-# Deploy a new netbibi image on the VPS.
-# Usage: bash deploy.sh <image-tag>
-# Invoked from GitHub Actions over SSH.
+# Deploy or roll back a netbibi image on the VPS.
+# Usage: bash deploy.sh <image-tag> [event_key=DEPLOYED] [actor=system]
+# Invoked from GitHub Actions over SSH (build-and-deploy.yml, dispatch-rollback.yml).
 set -euo pipefail
 
-TAG="${1:?Usage: deploy.sh <image-tag>}"
+TAG="${1:?Usage: deploy.sh <image-tag> [event_key] [actor]}"
+EVENT_KEY="${2:-DEPLOYED}"
+ACTOR="${3:-system}"
 APP_DIR="/home/deploy/apps/netbibi"
 
 cd "$APP_DIR"
@@ -17,8 +19,9 @@ if [[ -f .env ]]; then
     set +a
 fi
 
-# Run a command with exponential backoff. Usage: retry_with_backoff <attempts> <base_seconds> <cmd...>
-# base 2s, multiplier 2 -> sleeps 2s, 4s, 8s before attempts 2, 3, 4 respectively.
+# Run a command with exponential backoff.
+# Usage: retry_with_backoff <attempts> <base_seconds> <cmd...>
+# base 2s, multiplier 2 -> sleeps 2s, 4s, 8s before attempts 2, 3, 4.
 retry_with_backoff() {
     local attempts="$1"
     local base_delay="$2"
@@ -40,7 +43,7 @@ retry_with_backoff() {
     done
 }
 
-# POST a JSON event to the alerter (best-effort, never aborts the script unless caller checks).
+# POST a JSON event to the alerter (best-effort, never aborts caller).
 # Usage: alerter_post <key> <details_string>
 alerter_post() {
     local key="$1"
@@ -63,9 +66,20 @@ alerter_post() {
         || echo "[deploy] alerter notify ($key) failed (non-fatal)" >&2
 }
 
-echo "[deploy] pulling ghcr.io/glebsem2005/netbibi:$TAG"
+# Build event details: keep DEPLOYED byte-compat (no actor field),
+# include actor for ROLLBACK / PULL_FAILED for audit trail.
+build_details() {
+    local key="$1"
+    if [[ "$key" == "DEPLOYED" ]]; then
+        echo "tag=$TAG"
+    else
+        echo "tag=$TAG actor=$ACTOR"
+    fi
+}
+
+echo "[deploy] event=$EVENT_KEY pulling ghcr.io/glebsem2005/netbibi:$TAG"
 if ! retry_with_backoff 3 2 docker compose pull crawler; then
-    alerter_post "PULL_FAILED" "tag=$TAG"
+    alerter_post "PULL_FAILED" "$(build_details PULL_FAILED)"
     exit 1
 fi
 
@@ -75,6 +89,6 @@ docker compose up -d --remove-orphans crawler
 echo "[deploy] image prune (keep last 72h)"
 docker image prune -f --filter "until=72h" >/dev/null 2>&1 || true
 
-alerter_post "DEPLOYED" "tag=$TAG"
+alerter_post "$EVENT_KEY" "$(build_details "$EVENT_KEY")"
 
-echo "[deploy] done $TAG"
+echo "[deploy] done $EVENT_KEY tag=$TAG"
