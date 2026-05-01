@@ -12,7 +12,22 @@ import re
 from collections.abc import Mapping
 from dataclasses import dataclass
 from pathlib import Path
-from urllib.parse import urlparse, urlunparse
+from urllib.parse import urljoin, urlparse, urlunparse
+
+from bs4 import BeautifulSoup
+
+# CSS selectors removed before text/link extraction. Mirrors the original
+# fsn_parser.FOOTER_SELECTORS so footer navigation does not leak into
+# the page text or the discovered link graph.
+_FOOTER_SELECTORS = (
+    "footer",
+    "[class*='footer']",
+    "[id*='footer']",
+    "[class*='Footer']",
+    "[id*='Footer']",
+)
+_BOILERPLATE_TAGS = ("script", "style", "noscript", "meta", "head")
+_SKIP_HREF_PREFIXES = ("javascript:", "mailto:", "tel:", "#")
 
 
 @dataclass(frozen=True)
@@ -52,7 +67,28 @@ def is_valid_link(url: str, host_filter: re.Pattern[str]) -> bool:
 
 
 def parse_page(html: str, page_url: str, host_filter: re.Pattern[str]) -> tuple[str, list[str]]:
-    raise NotImplementedError
+    soup = BeautifulSoup(html, "lxml")
+    for selector in _FOOTER_SELECTORS:
+        for el in soup.select(selector):
+            el.decompose()
+    for tag in _BOILERPLATE_TAGS:
+        for el in soup.find_all(tag):
+            el.decompose()
+
+    text = soup.get_text(separator=" ", strip=True)
+    text = re.sub(r"[ \t]{2,}", " ", text)
+    text = re.sub(r"\n{3,}", "\n\n", text)
+    text = text.strip()
+
+    links: list[str] = []
+    for a in soup.find_all("a", href=True):
+        raw = str(a["href"]).strip()
+        if not raw or raw.startswith(_SKIP_HREF_PREFIXES):
+            continue
+        absolute = normalize_url(urljoin(page_url, raw))
+        if is_valid_link(absolute, host_filter):
+            links.append(absolute)
+    return text, links
 
 
 async def crawl(config: CrawlerConfig) -> CrawlStats:
