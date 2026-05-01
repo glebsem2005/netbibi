@@ -10,17 +10,21 @@ MODE env var dispatches:
 from __future__ import annotations
 
 import asyncio
+import logging
 import os
 import sys
 import time
 
 from netbibi import __version__
 from netbibi.crawler import CrawlerConfig, crawl
+from netbibi.logging_config import configure_logging
 
 
 def main() -> int:
+    configure_logging()
+    log = logging.getLogger("netbibi")
     mode = os.environ.get("MODE", "manual").lower()
-    print(f"netbibi v{__version__} [MODE={mode}]", flush=True)
+    log.info("startup", extra={"version": __version__, "mode": mode})
 
     if mode == "daemon":
         while True:
@@ -30,15 +34,16 @@ def main() -> int:
         try:
             config = CrawlerConfig.from_env()
         except ValueError as exc:
-            print(f"netbibi: config error — {exc}", file=sys.stderr)
+            log.error("config_error", extra={"error": str(exc)})
             return 1
         stats = asyncio.run(crawl(config))
-        print(
-            f"netbibi: crawl finished — "
-            f"pages_saved={stats.pages_saved} "
-            f"urls_visited={stats.urls_visited} "
-            f"errors={stats.errors}",
-            flush=True,
+        log.info(
+            "crawl_finished",
+            extra={
+                "pages_saved": stats.pages_saved,
+                "urls_visited": stats.urls_visited,
+                "errors": stats.errors,
+            },
         )
         return 0
 

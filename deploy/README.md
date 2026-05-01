@@ -46,7 +46,32 @@ ssh antopkin-vps 'cd /home/deploy/apps/netbibi && docker compose pull && docker 
 
 ## Rollback
 
-SSH into the VPS and pin a previous SHA tag:
+### Through GitHub UI (preferred)
+
+```bash
+gh workflow run dispatch-rollback.yml -f image_tag=sha-XXXXXXX
+```
+
+Or run from the GitHub Actions UI: **Actions → Dispatch Rollback → Run workflow**.
+
+The `image_tag` input must match `^sha-[0-9a-f]{7,}$|^v\d+(\.\d+)*$` (e.g. `sha-abc1234`,
+`v1.2.3`). Invalid tags fail the `validate` job before SSH — protects against
+shell injection (`foo;bar`, `latest`, whitespace, etc.).
+
+After a successful rollback, the alerter posts a `ROLLBACK` event to TG with the
+form `[netbibi] ROLLBACK tag=sha-XXX actor=<github-user>`. The alerter call lives
+in `deploy.sh` (same place as `DEPLOYED` for normal deploys).
+
+**If you change `deploy.sh`**, copy it to the VPS manually:
+
+```bash
+scp deploy/deploy.sh antopkin-vps:/home/deploy/apps/netbibi/deploy.sh
+```
+
+(`deploy.sh` is not auto-synced — see "First-time setup" above; CI/CD only invokes
+the existing copy on the VPS.)
+
+### Manual fallback (if GH Actions unavailable)
 
 ```bash
 ssh antopkin-vps 'cd /home/deploy/apps/netbibi && TAG=sha-OLDSHA docker compose up -d'
