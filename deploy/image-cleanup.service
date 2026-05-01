@@ -1,0 +1,13 @@
+[Unit]
+Description=Prune old netbibi images (label-scoped, older than 168h)
+Documentation=https://github.com/glebsem2005/netbibi (Plane 12-14)
+After=docker.service
+Requires=docker.service
+
+[Service]
+Type=oneshot
+# --filter label=... ensures we touch ONLY netbibi images and leave
+# the other ~7 projects on this VPS alone.
+ExecStart=/usr/bin/docker image prune -af \
+    --filter "until=168h" \
+    --filter "label=org.opencontainers.image.source=https://github.com/glebsem2005/netbibi"

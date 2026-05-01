@@ -1,0 +1,14 @@
+[Unit]
+Description=Weekly netbibi image cleanup
+Documentation=https://github.com/glebsem2005/netbibi (Plane 12-14)
+
+[Timer]
+# Every Sunday at 04:00 local time. Persistent=true catches up on missed runs
+# (e.g. after a host reboot) at the next opportunity.
+OnCalendar=Sun *-*-* 04:00:00
+Persistent=true
+RandomizedDelaySec=15min
+Unit=image-cleanup.service
+
+[Install]
+WantedBy=timers.target
