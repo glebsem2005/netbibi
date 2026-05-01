@@ -8,6 +8,7 @@ are decoupled from I/O so they can be unit-tested without mocks.
 
 from __future__ import annotations
 
+import os
 import re
 from collections.abc import Mapping
 from dataclasses import dataclass
@@ -43,7 +44,24 @@ class CrawlerConfig:
 
     @classmethod
     def from_env(cls, env: Mapping[str, str] | None = None) -> CrawlerConfig:
-        raise NotImplementedError
+        e: Mapping[str, str] = env if env is not None else os.environ
+        required = ("SEED_URL", "HOST_FILTER", "OUTPUT_DIR")
+        missing = [k for k in required if not e.get(k)]
+        if missing:
+            raise ValueError(f"Missing required env vars: {', '.join(missing)}")
+        return cls(
+            seed_url=e["SEED_URL"],
+            host_filter=re.compile(e["HOST_FILTER"]),
+            output_dir=Path(e["OUTPUT_DIR"]),
+            max_depth=int(e.get("MAX_DEPTH", "5")),
+            concurrency=int(e.get("CONCURRENCY", "12")),
+            request_delay_ms=int(e.get("REQUEST_DELAY_MS", "0")),
+            request_timeout_s=int(e.get("REQUEST_TIMEOUT_S", "30")),
+            user_agent=e.get(
+                "USER_AGENT",
+                "netbibi/0.1 (+https://github.com/glebsem2005/netbibi)",
+            ),
+        )
 
 
 @dataclass(frozen=True)

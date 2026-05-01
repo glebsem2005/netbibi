@@ -110,3 +110,56 @@ def test_parse_page_collapses_whitespace() -> None:
     assert "foo bar" in text
     # 3+ newlines collapse to 2
     assert "\n\n\n" not in text
+
+
+# --- CrawlerConfig.from_env ---
+
+
+def test_from_env_raises_with_all_missing_required_listed() -> None:
+    import pytest
+
+    with pytest.raises(ValueError) as exc_info:
+        crawler.CrawlerConfig.from_env(env={})
+    msg = str(exc_info.value)
+    # error names every missing required env var so the user fixes all at once
+    assert "SEED_URL" in msg
+    assert "HOST_FILTER" in msg
+    assert "OUTPUT_DIR" in msg
+
+
+def test_from_env_applies_defaults_and_compiles_regex(tmp_path: object) -> None:
+    env = {
+        "SEED_URL": "https://example.com",
+        "HOST_FILTER": r".*\.example\.com|example\.com",
+        "OUTPUT_DIR": "/tmp/out",
+    }
+    cfg = crawler.CrawlerConfig.from_env(env=env)
+    assert cfg.seed_url == "https://example.com"
+    # regex must come back compiled and ready to match
+    assert cfg.host_filter.fullmatch("sub.example.com") is not None
+    assert cfg.output_dir.as_posix() == "/tmp/out"
+    # defaults
+    assert cfg.max_depth == 5
+    assert cfg.concurrency == 12
+    assert cfg.request_delay_ms == 0
+    assert cfg.request_timeout_s == 30
+    assert "netbibi" in cfg.user_agent
+
+
+def test_from_env_overrides_defaults_when_present() -> None:
+    env = {
+        "SEED_URL": "https://x.com",
+        "HOST_FILTER": r"x\.com",
+        "OUTPUT_DIR": "/o",
+        "MAX_DEPTH": "3",
+        "CONCURRENCY": "4",
+        "REQUEST_DELAY_MS": "100",
+        "REQUEST_TIMEOUT_S": "10",
+        "USER_AGENT": "custom-agent/1.0",
+    }
+    cfg = crawler.CrawlerConfig.from_env(env=env)
+    assert cfg.max_depth == 3
+    assert cfg.concurrency == 4
+    assert cfg.request_delay_ms == 100
+    assert cfg.request_timeout_s == 10
+    assert cfg.user_agent == "custom-agent/1.0"
