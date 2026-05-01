@@ -36,7 +36,7 @@ WORKDIR /app
 
 COPY --link --from=builder /app/.venv /app/.venv
 COPY --link src/netbibi /app/src/netbibi
-COPY --link unique_words.csv /app/data/unique_words.csv
+COPY --link data/unique_words.csv /app/data/unique_words.csv
 
 RUN mkdir -p /app/output /app/logs && chown -R app:app /app
 

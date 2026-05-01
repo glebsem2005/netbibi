@@ -41,3 +41,7 @@ ruff.toml
 # Runtime artefacts
 output/
 logs/
+
+# Dataset CSVs that are only consumed by the offline pipeline,
+# not by the runtime image. unique_words.csv stays (Dockerfile copies it).
+data/fsn_*.csv
