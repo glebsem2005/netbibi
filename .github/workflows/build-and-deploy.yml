@@ -1,0 +1,121 @@
+name: Build and Deploy
+
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+  packages: write
+  id-token: write
+
+concurrency:
+  group: deploy-prod
+  cancel-in-progress: false
+
+env:
+  IMAGE: ghcr.io/${{ github.repository }}
+
+jobs:
+  gate:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: astral-sh/setup-uv@v3
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+      - run: uv sync --frozen --all-groups
+      - run: uv run ruff check .
+      - run: uv run ruff format --check .
+      - run: uv run mypy src tests
+      - run: uv run pytest --cov=netbibi --cov-report=term
+
+  build-and-push:
+    needs: gate
+    runs-on: ubuntu-24.04
+    outputs:
+      image_tag: ${{ steps.meta.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Login to ghcr.io
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Generate image metadata
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.IMAGE }}
+          tags: |
+            type=sha,format=short,prefix=sha-
+            type=ref,event=branch
+            type=raw,value=latest,enable={{is_default_branch}}
+
+      - name: Build and push
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: true
+          platforms: linux/amd64
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-24.04
+    env:
+      IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+    steps:
+      - name: Deploy on VPS
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          IMAGE_TAG: ${{ needs.build-and-push.outputs.image_tag }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: IMAGE_TAG
+          script: |
+            bash /home/deploy/apps/netbibi/deploy.sh "$IMAGE_TAG"
+
+  notify-failure:
+    needs: [gate, build-and-push, deploy]
+    if: failure()
+    runs-on: ubuntu-24.04
+    env:
+      COMMIT_SHA: ${{ github.sha }}
+      ACTOR: ${{ github.actor }}
+    steps:
+      - name: Notify alerter on failure
+        uses: appleboy/ssh-action@v1.2.0
+        env:
+          COMMIT_SHA: ${{ github.sha }}
+          ACTOR: ${{ github.actor }}
+        with:
+          host: ${{ secrets.DEPLOY_HOST }}
+          username: ${{ secrets.DEPLOY_USER }}
+          port: ${{ secrets.DEPLOY_PORT }}
+          key: ${{ secrets.DEPLOY_SSH_KEY }}
+          envs: COMMIT_SHA,ACTOR
+          script: |
+            cd /home/deploy/apps/netbibi
+            set -a
+            # shellcheck disable=SC1091
+            source .env 2>/dev/null || true
+            set +a
+            docker run --rm --network shared curlimages/curl:8.10.1 \
+              -fsS -X POST "${ALERTER_URL:-http://alerter:8080/alert}" \
+              -H "X-Alert-Token: ${ALERT_SHARED_TOKEN:-}" \
+              -H "Content-Type: application/json" \
+              --data "{\"source\":\"netbibi\",\"key\":\"DEPLOY_FAILED\",\"details\":\"sha=$COMMIT_SHA actor=$ACTOR\"}" \
+              || true

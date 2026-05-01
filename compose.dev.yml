@@ -1,0 +1,12 @@
+services:
+  crawler:
+    build:
+      context: .
+    container_name: netbibi-crawler-dev
+    env_file:
+      - .env
+    environment:
+      MODE: ${MODE:-once}
+    volumes:
+      - ./output:/app/output
+      - ./logs:/app/logs
