@@ -1,0 +1,43 @@
+# Git
+.git
+.gitignore
+.gitattributes
+.github/
+
+# Docs (the runtime image doesn't need them)
+*.md
+!README.md
+
+# Tests + dev tooling
+tests/
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage*
+htmlcov/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+
+# Repo-only files
+deploy/
+compose.dev.yml
+backlogged.md
+.env
+.env.example
+.editorconfig
+.python-version
+ruff.toml
+
+# Runtime artefacts
+output/
+logs/
