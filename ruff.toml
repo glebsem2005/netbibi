@@ -17,12 +17,9 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
 ]
 # scripts/ contains Russian regex / markers / docstrings on purpose
 # (the project crawls and processes Russian-language pages).
-"scripts/*.py" = [
-    "RUF001", "RUF002", "RUF003",  # Russian-text Cyrillic look-alikes
-]
-"tests/test_extract_profiles.py" = [
-    "RUF001", "RUF002", "RUF003",
-]
+"scripts/*.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_onomastic_classifier.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_extract_profiles.py" = ["RUF001", "RUF002", "RUF003"]
 
 [format]
 indent-style = "space"
