@@ -8,13 +8,18 @@ are decoupled from I/O so they can be unit-tested without mocks.
 
 from __future__ import annotations
 
+import asyncio
+import csv
 import os
 import re
-from collections.abc import Mapping
+import sys
+from collections.abc import Callable, Mapping
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Any
 from urllib.parse import urljoin, urlparse, urlunparse
 
+import aiohttp
 from bs4 import BeautifulSoup
 
 # CSS selectors removed before text/link extraction. Mirrors the original
@@ -109,5 +114,111 @@ def parse_page(html: str, page_url: str, host_filter: re.Pattern[str]) -> tuple[
     return text, links
 
 
-async def crawl(config: CrawlerConfig) -> CrawlStats:
-    raise NotImplementedError
+async def _fetch(session: Any, url: str, timeout_s: int) -> str | None:
+    """Fetch one URL; returns HTML on 200 + text/html, else None.
+
+    Mirrors the silent-failure semantics of fsn_parser.fetch
+    (errors logged to stderr, return None) — a single bad URL must not
+    abort a long crawl.
+    """
+    timeout = aiohttp.ClientTimeout(total=timeout_s)
+    try:
+        async with session.get(
+            url,
+            timeout=timeout,
+            allow_redirects=True,
+            max_redirects=5,
+        ) as resp:
+            if resp.status != 200:
+                return None
+            ctype = resp.headers.get("content-type", "")
+            if "text/html" not in ctype:
+                return None
+            text: str = await resp.text(errors="replace")
+            return text
+    except Exception as exc:
+        print(f"[crawler] fetch error {url}: {exc}", file=sys.stderr)
+        return None
+
+
+def _default_session_factory(config: CrawlerConfig) -> Callable[[], Any]:
+    def factory() -> Any:
+        return aiohttp.ClientSession(
+            connector=aiohttp.TCPConnector(limit=config.concurrency),
+            headers={"User-Agent": config.user_agent},
+        )
+
+    return factory
+
+
+async def crawl(
+    config: CrawlerConfig,
+    *,
+    session_factory: Callable[[], Any] | None = None,
+) -> CrawlStats:
+    """BFS crawl from `config.seed_url` constrained by `config.host_filter`.
+
+    Writes `text.csv` (url, text) and `links.csv` (from_url, to_url) into
+    `config.output_dir`, streamed and flushed per BFS level.
+    `session_factory` is a test seam: defaults to a real aiohttp session.
+    """
+    factory = session_factory or _default_session_factory(config)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
+
+    pages_saved = 0
+    urls_visited = 0
+    errors = 0
+
+    seed = normalize_url(config.seed_url)
+    visited: set[str] = {seed}
+    queue: list[tuple[str, int]] = [(seed, 0)]
+
+    text_path = config.output_dir / "text.csv"
+    links_path = config.output_dir / "links.csv"
+
+    async with factory() as session:
+        with (
+            text_path.open("w", encoding="utf-8", newline="") as text_f,
+            links_path.open("w", encoding="utf-8", newline="") as links_f,
+        ):
+            text_w = csv.writer(text_f, quoting=csv.QUOTE_ALL)
+            links_w = csv.writer(links_f, quoting=csv.QUOTE_ALL)
+            text_w.writerow(["url", "text"])
+            links_w.writerow(["from_url", "to_url"])
+
+            while queue:
+                level = queue
+                queue = []
+                cur_depth = level[0][1]
+                if cur_depth > config.max_depth:
+                    break
+
+                if config.request_delay_ms:
+                    await asyncio.sleep(config.request_delay_ms / 1000)
+
+                results = await asyncio.gather(
+                    *(_fetch(session, url, config.request_timeout_s) for url, _ in level)
+                )
+
+                for (url, depth), html in zip(level, results, strict=True):
+                    urls_visited += 1
+                    if html is None:
+                        errors += 1
+                        continue
+                    text, links = parse_page(html, url, config.host_filter)
+                    text_w.writerow([url, text])
+                    pages_saved += 1
+                    for link in set(links):
+                        links_w.writerow([url, link])
+                        if link not in visited and depth + 1 <= config.max_depth:
+                            visited.add(link)
+                            queue.append((link, depth + 1))
+
+                text_f.flush()
+                links_f.flush()
+
+    return CrawlStats(
+        pages_saved=pages_saved,
+        urls_visited=urls_visited,
+        errors=errors,
+    )

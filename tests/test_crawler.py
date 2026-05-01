@@ -2,7 +2,9 @@
 
 from __future__ import annotations
 
+import asyncio
 import re
+from pathlib import Path
 
 from netbibi import crawler
 
@@ -163,3 +165,97 @@ def test_from_env_overrides_defaults_when_present() -> None:
     assert cfg.request_delay_ms == 100
     assert cfg.request_timeout_s == 10
     assert cfg.user_agent == "custom-agent/1.0"
+
+
+# --- crawl() smoke test with FakeSession ---
+
+
+class _FakeResponse:
+    def __init__(self, html: str, status: int = 200) -> None:
+        self._html = html
+        self.status = status
+        self.headers = {"content-type": "text/html; charset=utf-8"}
+
+    async def text(self, errors: str = "strict") -> str:
+        return self._html
+
+    async def __aenter__(self) -> _FakeResponse:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+
+class _FakeSession:
+    def __init__(self, pages: dict[str, str]) -> None:
+        self._pages = pages
+        self.requested: list[str] = []
+
+    def get(self, url: str, **kwargs: object) -> _FakeResponse:
+        self.requested.append(url)
+        if url in self._pages:
+            return _FakeResponse(self._pages[url], status=200)
+        return _FakeResponse("", status=404)
+
+    async def __aenter__(self) -> _FakeSession:
+        return self
+
+    async def __aexit__(self, *exc_info: object) -> None:
+        return None
+
+
+def test_crawl_bfs_writes_text_and_links_csv_into_output_dir(
+    tmp_path: Path,
+) -> None:
+    pages = {
+        "https://example.com": (
+            '<html><body><a href="/about">About</a><a href="/contact">Contact</a></body></html>'
+        ),
+        "https://example.com/about": (
+            '<html><body><h1>About us</h1><a href="/team">Team</a></body></html>'
+        ),
+        "https://example.com/contact": ("<html><body><p>Contact details</p></body></html>"),
+        "https://example.com/team": ("<html><body><p>Team page</p></body></html>"),
+    }
+    session = _FakeSession(pages)
+    cfg = crawler.CrawlerConfig(
+        seed_url="https://example.com",
+        host_filter=re.compile(r"example\.com"),
+        output_dir=tmp_path,
+        max_depth=3,
+        concurrency=2,
+    )
+
+    stats = asyncio.run(crawler.crawl(cfg, session_factory=lambda: session))
+
+    assert stats.pages_saved == 4  # all four pages reachable within depth 3
+    text_csv = tmp_path / "text.csv"
+    links_csv = tmp_path / "links.csv"
+    assert text_csv.exists()
+    assert links_csv.exists()
+    text = text_csv.read_text(encoding="utf-8")
+    links = links_csv.read_text(encoding="utf-8")
+    assert "About us" in text
+    assert "Contact details" in text
+    assert "Team page" in text
+    assert "https://example.com/about" in links
+    assert "https://example.com/contact" in links
+
+
+def test_crawl_respects_max_depth_zero_only_visits_seed(tmp_path: Path) -> None:
+    pages = {
+        "https://example.com": ('<html><body><a href="/deeper">Deeper</a></body></html>'),
+        "https://example.com/deeper": ("<html><body><p>Deeper</p></body></html>"),
+    }
+    session = _FakeSession(pages)
+    cfg = crawler.CrawlerConfig(
+        seed_url="https://example.com",
+        host_filter=re.compile(r"example\.com"),
+        output_dir=tmp_path,
+        max_depth=0,
+        concurrency=1,
+    )
+    stats = asyncio.run(crawler.crawl(cfg, session_factory=lambda: session))
+    # only seed visited; child URL never fetched
+    assert stats.pages_saved == 1
+    assert "https://example.com/deeper" not in session.requested
