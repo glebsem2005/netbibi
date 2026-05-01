@@ -4,6 +4,12 @@ line-length = 100
 [lint]
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
 
+[lint.per-file-ignores]
+# Russian-language print/log strings produce false positives on RUF001/2/3
+# (ambiguous Cyrillic vs Latin look-alikes). Suppress for files we know are
+# Russian by design.
+"fsn_parser.py" = ["RUF001", "RUF002", "RUF003"]
+
 [format]
 indent-style = "space"
 quote-style = "double"
