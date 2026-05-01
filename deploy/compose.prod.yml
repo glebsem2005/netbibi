@@ -1,8 +1,11 @@
 services:
   crawler:
     image: ghcr.io/glebsem2005/netbibi:${TAG:-latest}
-    container_name: netbibi-crawler
+    container_name: netbibi-crawler  # do not rename — infra-watcher matches by name
     restart: unless-stopped
+    init: true                       # PID 1 reaper, clean signal forwarding
+    mem_limit: 1g                    # cap memory so we don't starve neighbours
+    cpus: "1.5"                      # cap CPU so we don't starve neighbours
     env_file:
       - .env
     environment:
