@@ -27,7 +27,9 @@ def test_main_returns_one_in_once_mode_without_required_env(
     monkeypatch.delenv("OUTPUT_DIR", raising=False)
     assert main() == 1
     err = capsys.readouterr().err
-    assert "config error" in err
+    # After merge with structured logging (12-10): error goes through
+    # log.error as a JSON record on stderr with event=config_error.
+    assert "config_error" in err
 
 
 def test_main_invokes_crawl_in_once_mode_with_env(
