@@ -13,7 +13,38 @@ def test_version_is_nonempty_string() -> None:
     assert netbibi.__version__
 
 
-@pytest.mark.parametrize("mode", ["manual", "once"])
-def test_main_returns_zero(monkeypatch: pytest.MonkeyPatch, mode: str) -> None:
-    monkeypatch.setenv("MODE", mode)
+def test_main_returns_zero_in_manual_mode(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("MODE", "manual")
+    assert main() == 0
+
+
+def test_main_returns_one_in_once_mode_without_required_env(
+    monkeypatch: pytest.MonkeyPatch, capsys: pytest.CaptureFixture[str]
+) -> None:
+    monkeypatch.setenv("MODE", "once")
+    monkeypatch.delenv("SEED_URL", raising=False)
+    monkeypatch.delenv("HOST_FILTER", raising=False)
+    monkeypatch.delenv("OUTPUT_DIR", raising=False)
+    assert main() == 1
+    err = capsys.readouterr().err
+    # After merge with structured logging (12-10): error goes through
+    # log.error as a JSON record on stderr with event=config_error.
+    assert "config_error" in err
+
+
+def test_main_invokes_crawl_in_once_mode_with_env(
+    monkeypatch: pytest.MonkeyPatch, tmp_path: object
+) -> None:
+    """MODE=once with full env runs crawl(); we monkeypatch crawl to skip network."""
+    from netbibi import crawler
+    from netbibi.crawler import CrawlStats
+
+    async def fake_crawl(config: crawler.CrawlerConfig) -> CrawlStats:
+        return CrawlStats(pages_saved=7, urls_visited=10, errors=0)
+
+    monkeypatch.setenv("MODE", "once")
+    monkeypatch.setenv("SEED_URL", "https://example.com")
+    monkeypatch.setenv("HOST_FILTER", r"example\.com")
+    monkeypatch.setenv("OUTPUT_DIR", str(tmp_path))
+    monkeypatch.setattr("netbibi.__main__.crawl", fake_crawl)
     assert main() == 0
