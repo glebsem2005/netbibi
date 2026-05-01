@@ -19,6 +19,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
 # (the project crawls and processes Russian-language pages).
 "scripts/*.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_onomastic_classifier.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_extract_profiles.py" = ["RUF001", "RUF002", "RUF003"]
 
 [format]
 indent-style = "space"
