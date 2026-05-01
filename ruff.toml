@@ -15,6 +15,14 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
     "B905",                          # zip() strict=
     "F541",                          # f-string without placeholders
 ]
+# scripts/ contains Russian regex / markers / docstrings on purpose
+# (the project crawls and processes Russian-language pages).
+"scripts/*.py" = [
+    "RUF001", "RUF002", "RUF003",  # Russian-text Cyrillic look-alikes
+]
+"tests/test_extract_profiles.py" = [
+    "RUF001", "RUF002", "RUF003",
+]
 
 [format]
 indent-style = "space"
