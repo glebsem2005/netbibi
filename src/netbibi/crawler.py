@@ -45,7 +45,10 @@ def normalize_url(url: str) -> str:
 
 
 def is_valid_link(url: str, host_filter: re.Pattern[str]) -> bool:
-    raise NotImplementedError
+    parsed = urlparse(url)
+    if parsed.scheme not in {"http", "https"}:
+        return False
+    return host_filter.fullmatch(parsed.netloc) is not None
 
 
 def parse_page(html: str, page_url: str, host_filter: re.Pattern[str]) -> tuple[str, list[str]]:
