@@ -5,8 +5,15 @@ updates:
     schedule:
       interval: "weekly"
     groups:
-      actions:
+      # Auto-mergeable in spirit: minor and patch bumps tend to be safe.
+      actions-minor-patch:
         patterns: ["*"]
+        update-types: ["minor", "patch"]
+      # Major bumps land in their own PR for deliberate review
+      # (e.g. actions/checkout v4→v6 changed Node runtime).
+      actions-major:
+        patterns: ["*"]
+        update-types: ["major"]
 
   - package-ecosystem: "uv"
     directory: "/"

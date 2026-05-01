@@ -29,6 +29,10 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ---------- runtime ----------
 FROM python:3.12-slim-bookworm AS runtime
 
+# Identifies images belonging to this project so the VPS-side cleanup
+# cron can prune only our images and leave neighbouring projects alone.
+LABEL org.opencontainers.image.source="https://github.com/glebsem2005/netbibi"
+
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home /app --shell /usr/sbin/nologin app
 
@@ -36,7 +40,7 @@ WORKDIR /app
 
 COPY --link --from=builder /app/.venv /app/.venv
 COPY --link src/netbibi /app/src/netbibi
-COPY --link unique_words.csv /app/data/unique_words.csv
+COPY --link data/unique_words.csv /app/data/unique_words.csv
 
 RUN mkdir -p /app/output /app/logs && chown -R app:app /app
 

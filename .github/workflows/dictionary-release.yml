@@ -1,0 +1,47 @@
+name: Dictionary Release
+
+# Triggers on tags like dict-v1, dict-v2.0.1, etc. The tag scheme is
+# distinct from app releases so dictionary versions can move
+# independently of the container image.
+on:
+  push:
+    tags:
+      - 'dict-v*'
+
+permissions:
+  contents: write   # gh release create
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@v7
+        with:
+          enable-cache: true
+          cache-dependency-glob: "uv.lock"
+
+      - name: Install deps including pymorphy3 (dev group)
+        run: uv sync --frozen --all-groups
+
+      - name: Build lemmatized dictionary
+        env:
+          INPUT: data/unique_words.csv
+          OUTPUT: lemmatized_dictionary.csv
+        run: |
+          uv run python scripts/build_dictionary.py \
+            --input "$INPUT" \
+            --output "$OUTPUT"
+          wc -l "$OUTPUT"
+
+      - name: Create GitHub Release with asset
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAG_NAME: ${{ github.ref_name }}
+        run: |
+          gh release create "$TAG_NAME" \
+            --title "Dictionary $TAG_NAME" \
+            --notes "Lemmatized netbibi dictionary built from data/unique_words.csv via pymorphy3. See scripts/build_dictionary.py for the schema (lemma, form, pos, grammemes)." \
+            lemmatized_dictionary.csv
