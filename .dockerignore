@@ -10,6 +10,7 @@
 
 # Tests + dev tooling
 tests/
+scripts/
 .venv/
 venv/
 env/
