@@ -5,10 +5,16 @@ line-length = 100
 select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
 
 [lint.per-file-ignores]
-# Russian-language print/log strings produce false positives on RUF001/2/3
-# (ambiguous Cyrillic vs Latin look-alikes). Suppress for files we know are
-# Russian by design.
-"fsn_parser.py" = ["RUF001", "RUF002", "RUF003"]
+# fsn_parser.py is an early prototype committed via UI — keep it green
+# without rewriting. Will be moved into src/netbibi/ and properly cleaned
+# in a follow-up PR.
+"fsn_parser.py" = [
+    "RUF001", "RUF002", "RUF003",  # Russian-text Cyrillic look-alikes
+    "I001",                          # import sorting
+    "SIM103", "SIM115",              # control-flow / context managers
+    "B905",                          # zip() strict=
+    "F541",                          # f-string without placeholders
+]
 
 [format]
 indent-style = "space"
