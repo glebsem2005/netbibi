@@ -20,6 +20,7 @@ select = ["E", "F", "W", "I", "UP", "B", "SIM", "RUF", "N"]
 "scripts/*.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_onomastic_classifier.py" = ["RUF001", "RUF002", "RUF003"]
 "tests/test_extract_profiles.py" = ["RUF001", "RUF002", "RUF003"]
+"tests/test_word_matching.py" = ["RUF001", "RUF002", "RUF003"]
 
 [format]
 indent-style = "space"
