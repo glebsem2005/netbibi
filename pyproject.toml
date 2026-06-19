@@ -16,10 +16,10 @@ dependencies = [
 
 [dependency-groups]
 dev = [
-    "pytest>=8",
+    "pytest>=9.1.0",
     "pytest-cov>=5",
-    "ruff>=0.7",
-    "mypy>=1.13",
+    "ruff>=0.15.18",
+    "mypy>=2.1.0",
     "pymorphy3>=2.0.6",
     "pymorphy3-dicts-ru>=2.4.417150.4580142",
 ]
